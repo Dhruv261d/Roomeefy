@@ -1,29 +1,11 @@
 import { Box } from 'lucide-react';
 import React from 'react'
 import Button from './ui/Button';
-import { useOutletContext } from 'react-router';
-import type { AuthContext } from 'type';
+import { NavLink } from 'react-router';
+import { SignInButton, UserButton, useAuth } from '@clerk/react';
 
 const Navbar = () => {
-    const { isSignedIn, userName, signIn, signOut} = useOutletContext<AuthContext>();
-
-    const handleAuthClick = async () => {
-        if(isSignedIn) {
-            try {
-                await signOut();
-            } catch(e) {
-                console.error(`Puter sign out failed: ${e}`);
-            }
-
-            return;
-        }
-
-        try {
-            await signIn();
-        } catch (e) {
-            console.error(`Puter sign in failed: ${e}`);
-        }
-    };
+    const { userId } = useAuth();
 
   return (
     <header className='navbar'>
@@ -37,33 +19,24 @@ const Navbar = () => {
                 </div>
 
                 <ul className='links'>
-                    <a href="#">Product</a>
-                    <a href="#">Pricing</a>
-                    <a href="#">Community</a>
-                    <a href="#">Enterprice</a>
+                    <NavLink to="/" end className={({ isActive }) => isActive ? 'active' : ''}>Product</NavLink>
+                    <NavLink to="/pricing" className={({ isActive }) => isActive ? 'active' : ''}>Pricing</NavLink>
+                    <NavLink to="/community" className={({ isActive }) => isActive ? 'active' : ''}>Community</NavLink>
                 </ul>
             </div>
 
             <div className='actions'>
-                {isSignedIn ? (
-                  <>
-                    <span className='greeting'>
-                        {userName ? `Hi, ${userName}` : 'Signed in'}
-                    </span>
-
-                    <Button onClick={handleAuthClick} className='btn'>
-                        Log Out
-                    </Button>
-                  </>  
+                {userId ? (
+                    <UserButton />
                 ) : (
-                    <>
-                        <Button 
-                            onClick={handleAuthClick} size='sm' variant='ghost'>
-                            Log In
-                        </Button>
-
-                        <a href="#upload" className='cta'>Get Started</a>
-                    </>
+                    <div className="auth-group">
+                        <SignInButton mode="modal">
+                            <Button size='sm' variant='ghost'>
+                                Log In
+                            </Button>
+                        </SignInButton>
+                        <a href="/#upload" className='cta'>Get Started</a>
+                    </div>
                 )}
             </div>
         </nav>

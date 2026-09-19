@@ -1,8 +1,7 @@
 import { PROGRESS_INCREMENT, PROGRESS_INTERVAL_MS, REDIRECT_DELAY_MS } from 'lib/constants';
 import { CheckCircle2, ImageIcon, UploadIcon } from 'lucide-react';
 import React, { useCallback, useEffect, useRef, useState } from 'react'
-import { useOutletContext } from 'react-router';
-import type { AuthContext } from 'type';
+import { useAuth } from '@clerk/react';
 
 interface UploadProps {
     onComplete?: (base64Data: string) => void;
@@ -15,7 +14,7 @@ const Upload = ({onComplete}: UploadProps) => {
     const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
     const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-    const {isSignedIn} = useOutletContext<AuthContext>(); 
+    const {isSignedIn} = useAuth(); 
 
     useEffect(() => {
         return(() => {
@@ -100,7 +99,7 @@ const Upload = ({onComplete}: UploadProps) => {
                     <p>
                         {isSignedIn ? (
                             "Click to upload or just drag and drop"
-                        ): ("Sign in or sign up with Puter to upload")}
+                        ): ("Sign in or sign up with Google to upload")}
                     </p>
                     <p className='help'>Maximum file size 50 MB.</p>
                 </div>

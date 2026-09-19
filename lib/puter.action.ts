@@ -2,6 +2,7 @@ import puter from "@heyputer/puter.js";
 import { getOrCreateHostingConfig, uploadImageToHosting } from "puter.hosting";
 import { isHostedUrl } from "./utils";
 import { PUTER_WORKER_URL } from "./constants";
+import type { CreateProjectParams, DesignItem } from "type";
 
 export const signIn = async () => await puter.auth.signIn();
 
@@ -15,15 +16,24 @@ export const getCurrentUser = async () => {
     }
 }
 
-export const createProject = async ({ item, visibility= 'private' }: CreateProjectParams): Promise<DesignItem | null | undefined> => {
-
-    if(!PUTER_WORKER_URL) {
-        console.warn('Missing VITE_PUTER_WORKER_URL; skip history fetch;');
-        return null;
+// Helper to attach Clerk token to all API requests
+const authFetch = async (url: string, options: RequestInit = {}) => {
+    let token = null;
+    if (typeof window !== 'undefined' && (window as any).Clerk?.session) {
+        token = await (window as any).Clerk.session.getToken();
     }
+    
+    const headers = new Headers(options.headers || {});
+    if (token) {
+        headers.set('Authorization', `Bearer ${token}`);
+    }
+    headers.set('Content-Type', 'application/json');
 
+    return fetch(url, { ...options, headers });
+}
+
+export const createProject = async ({ item, visibility= 'private' }: CreateProjectParams): Promise<DesignItem | null | undefined> => {
     const projectId = item.id;
-
     const hosting = await getOrCreateHostingConfig();
 
     const hostedSource = projectId ?
@@ -37,121 +47,81 @@ export const createProject = async ({ item, visibility= 'private' }: CreateProje
         }) : null;
 
     const resolvedSource = hostedSource?.url || (isHostedUrl(item.sourceImage) ? item.sourceImage : '');
-
-    if(!resolvedSource) {
-        console.warn('Failed to host source image, skipping save.');
-        return null;
-    }
+    if(!resolvedSource) return null;
 
     const resolvedRender = hostedRender?.url ? hostedRender?.url
         : item.renderedImage && isHostedUrl(item.renderedImage)
         ? item.renderedImage 
         : undefined;
 
-    const { 
-        sourcePath: _sourcePath,
-        renderedPath: _renderedPath,
-        publicPath: _publicPath,
-        ...rest
-    } = item;
-
     const payload = {
-        ...rest,
+        ...item,
         sourceImage: resolvedSource,
         renderedImage: resolvedRender,
+        isPublic: visibility === 'public'
     }
 
     try {
-        const response = await puter.workers.exec(`${PUTER_WORKER_URL}/api/projects/save`, { 
+        const response = await authFetch('/api/projects', {
             method: 'POST',
-            headers: {'Content-Type': 'application/json'}, body: JSON.stringify({
-                project: payload, visibility
-            })
+            body: JSON.stringify({ action: 'create', item: payload, userName: item.ownerName })
         });
-
-        if(!response.ok) {
-            console.error('failed to save the project', await response.text());
-            return null;
-        }
-
-        const data = (await response.json()) as { project?: DesignItem | null};
-
-        return data?.project ?? null;
+        const data = await response.json();
+        return data.project;
     } catch (e) {
-        console.log('Failed to save project', e);
+        console.error('Failed to save to MongoDB', e);
         return null;
     }
 } 
 
-export const getProjects = async () => {
-    if(!PUTER_WORKER_URL){
-        console.warn('Missing VITE_PUTER_WORKER_URL; skip history fetch;');
-        return []
-    }
-
+export const updateProjectVisibility = async ({ item, isPublic }: { item: DesignItem, isPublic: boolean }) => {
     try {
-        const response = await puter.workers.exec(`${PUTER_WORKER_URL}/api/projects/list`, { method: 'GET'});
-
-        if(!response.ok) {
-            console.error('Failed to fetch history', await response.text());
-            return [];
-        }
-
-        // const data = (await response.json()) as { projects?: DesignItem[] | null};
-        // return Array.isArray(data?.projects) ? data?.projects: []; 
-        let data = null;
-
-        try {
-            const text = await response.text();
-
-            if (!text) {
-                console.warn("Empty response from server");
-                return [];
-            }
-
-            data = JSON.parse(text);
-        } catch (err) {
-            console.error("Invalid JSON response", err);
-            return [];
-        }
-
-        return Array.isArray(data?.projects) ? data.projects : [];
+        const response = await authFetch('/api/projects', {
+            method: 'POST',
+            body: JSON.stringify({ action: 'updateVisibility', projectId: item.id, isPublic })
+        });
+        const data = await response.json();
+        return data.project;
     } catch (e) {
-        console.error('Failed to get projects', e);
+        return null;
+    }
+}
+
+export const getProjects = async () => {
+    try {
+        const response = await authFetch('/api/projects');
+        const data = await response.json();
+        return data.projects || [];
+    } catch (e) {
         return [];
     }
 }
 
 export const getProjectById = async ({ id }: { id: string }) => {
-    if (!PUTER_WORKER_URL) {
-        console.warn("Missing VITE_PUTER_WORKER_URL; skipping project fetch.");
-        return null;
-    }
-
-    console.log("Fetching project with ID:", id);
-
-    try {
-        const response = await puter.workers.exec(
-            `${PUTER_WORKER_URL}/api/projects/get?id=${encodeURIComponent(id)}`,
-            { method: "GET" },
-        );
-
-        console.log("Fetch project response:", response);
-
-        if (!response.ok) {
-            console.error("Failed to fetch project:", await response.text());
-            return null;
-        }
-
-        const data = (await response.json()) as {
-            project?: DesignItem | null;
-        };
-
-        console.log("Fetched project data:", data);
-
-        return data?.project ?? null;
-    } catch (error) {
-        console.error("Failed to fetch project:", error);
-        return null;
-    }
+    // For simplicity, we fetch all and find, or we could add a specific API call
+    const projects = await getProjects();
+    return projects.find((p: any) => p.projectId === id || p.id === id) || null;
 };
+
+export const getPublicProjects = async () => {
+    try {
+        const response = await authFetch('/api/projects?type=community');
+        const data = await response.json();
+        return data.projects || [];
+    } catch (e) {
+        return [];
+    }
+}
+
+export const deleteProject = async (id: string) => {
+    try {
+        const response = await authFetch('/api/projects', {
+            method: 'POST',
+            body: JSON.stringify({ action: 'delete', projectId: id })
+        });
+        return response.ok;
+    } catch (e) {
+        return false;
+    }
+}
+

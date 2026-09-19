@@ -1,6 +1,7 @@
 import puter from "@heyputer/puter.js";
 import { Minimize } from "lucide-react"
 import { ROOMEEFY_RENDER_PROMPT } from "./constants";
+import type { Generate3DViewParams } from "type";
 
 export const fetchAsDataUrl = async (url: string) :Promise<string> => {
     const response = await fetch(url);
@@ -19,7 +20,7 @@ export const fetchAsDataUrl = async (url: string) :Promise<string> => {
     });
 };
 
-export const generate3DView = async ({ sourceImage }: generate3DViewParams) => {
+export const generate3DView = async ({ sourceImage }: Generate3DViewParams) => {
     const dataUrl = sourceImage.startsWith('data:')
         ? sourceImage
         : await fetchAsDataUrl(sourceImage);

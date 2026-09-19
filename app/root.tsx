@@ -26,69 +26,33 @@ export const links: Route.LinksFunction = () => [
   },
 ];
 
+import { ClerkProvider } from "@clerk/react";
+
+const PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY || "";
 export function Layout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
-      <head>
-        <meta charSet="utf-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <Meta />
-        <Links />
-      </head>
-      <body>
-        {children}
-        <ScrollRestoration />
-        <Scripts />
-      </body>
-    </html>
+    <ClerkProvider publishableKey={PUBLISHABLE_KEY}>
+      <html lang="en">
+        <head>
+          <meta charSet="utf-8" />
+          <meta name="viewport" content="width=device-width, initial-scale=1" />
+          <Meta />
+          <Links />
+        </head>
+        <body>
+          {children}
+          <ScrollRestoration />
+          <Scripts />
+        </body>
+      </html>
+    </ClerkProvider>
   );
 }
 
-const DEFAULT_AUTH_STATE: AuthState = {
-  isSignedIn: false,
-  userName: null,
-  userId: null,
-}
-
 export default function App() {
-  const [authState, setAuthState] = useState<AuthState>(DEFAULT_AUTH_STATE);
-
-  const refreshAuth = async () => {
-    try {
-      const user = await getCurrentUser();
-
-      setAuthState({
-        isSignedIn: !!user,
-        userName: user?.username || null,
-        userId: user?.uuid ||null,
-      });
-
-      return !!user; 
-    } catch {
-      setAuthState(DEFAULT_AUTH_STATE);
-      return false;
-    }
-  }
-
-  useEffect(() => {
-    refreshAuth()
-  }, []);
-
-  const signIn = async () => {
-    await puterSignIn();
-    return await refreshAuth();
-  }
-
-  const signOut = async () => {
-    puterSignOut();
-    return await refreshAuth();
-  }
-
   return (
     <main className="min-h-screen bg-background text-foreground relative z-10">
-      <Outlet 
-        context={{ ...authState, refreshAuth, signIn, signOut }}
-      />
+      <Outlet />
     </main>
   );
 }

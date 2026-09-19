@@ -1,15 +1,19 @@
 import Button from 'components/ui/Button';
 import { generate3DView } from 'lib/ai.action';
-import { createProject, getProjectById } from 'lib/puter.action';
-import { Box, Download, RefreshCcw, Share2, X } from 'lucide-react';
+import { createProject, getProjectById, updateProjectVisibility } from 'lib/puter.action';
+import { Box, Download, RefreshCcw, Share2, X, Globe, Lock, Check } from 'lucide-react';
 import React, { useEffect, useRef, useState } from 'react'
 import { ReactCompareSlider, ReactCompareSliderImage } from 'react-compare-slider';
-import { useLocation, useNavigate, useOutletContext, useParams } from 'react-router'
+import { useNavigate, useParams } from 'react-router'
+import { useUser } from '@clerk/react';
+import type { DesignItem } from 'type';
 
 const VisualizerId = () => {
   const {id} = useParams();
   const navigate = useNavigate();
-  const {userId} = useOutletContext<AuthContext>();
+  const { user } = useUser();
+  const userId = user?.id;
+  const userName = user?.fullName || user?.username;
 
   const hasInitialGenerated = useRef(false);
 
@@ -18,6 +22,8 @@ const VisualizerId = () => {
 
   const [isProcessing, setIsProcessing] = useState(false);
   const [currentImage, setCurrentImage] = useState<string | null>(null);
+  const [shareStatus, setShareStatus] = useState<'idle' | 'copied' | 'open'>('idle');
+  const [isUpdatingVisibility, setIsUpdatingVisibility] = useState(false);
 
   const handleBack = () => navigate('/');
   const handleExport = () => {
@@ -29,6 +35,48 @@ const VisualizerId = () => {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+  }
+
+  const handleShare = async () => {
+    const shareData = {
+        title: project?.name || 'Roomeefy Design',
+        text: 'Check out this amazing architectural design I created with Roomeefy!',
+        url: window.location.href,
+    };
+
+    try {
+        if (navigator.share && navigator.canShare && navigator.canShare(shareData)) {
+            await navigator.share(shareData);
+        } else {
+            await navigator.clipboard.writeText(window.location.href);
+            setShareStatus('copied');
+            setTimeout(() => setShareStatus('idle'), 2000);
+        }
+    } catch (err) {
+        console.error('Share failed: ', err);
+    }
+  }
+
+  const toggleVisibility = async () => {
+    if (!project || !id) return;
+    
+    setIsUpdatingVisibility(true);
+    const newIsPublic = !project.isPublic;
+    
+    try {
+        const updated = await updateProjectVisibility({ item: project, isPublic: newIsPublic });
+        if (updated) {
+            setProject(updated);
+            const toast = document.createElement('div');
+            toast.className = 'share-toast'; // Reusing share-toast style
+            toast.innerText = newIsPublic ? 'Visibility: Public' : 'Visibility: Private';
+            toast.style.top = '20px';
+            document.body.appendChild(toast);
+            setTimeout(() => toast.remove(), 2000);
+        }
+    } finally {
+        setIsUpdatingVisibility(false);
+    }
   }
 
   const runGeneration = async (item: DesignItem) => {
@@ -47,10 +95,11 @@ const VisualizerId = () => {
           renderedPath: result.renderedPath,
           timestamp: Date.now(),
           ownerId: item.ownerId ?? userId ?? null,
+          ownerName: item.ownerName ?? userName ?? null,
           isPublic: item.isPublic ?? false,
         }
 
-        const saved = await createProject({ item: updatedItem, visibility: 'private'})
+        const saved = await createProject({ item: updatedItem, visibility: updatedItem.isPublic ? 'public' : 'private'})
 
         if(saved) {
           setProject(saved);
@@ -141,8 +190,39 @@ const VisualizerId = () => {
                 >
                   <Download className='w-4 h-4 mr-2'/> Export
                 </Button>
-                <Button size='sm' onClick={() => {}} className='share'>
-                  <Share2 className='w-4 h-4 mr-2'/>Share
+                <div className='share-wrapper' style={{ position: 'relative' }}>
+                  <Button size='sm' onClick={() => setShareStatus(shareStatus === 'open' ? 'idle' : 'open')} className='share'>
+                    <Share2 className='w-4 h-4 mr-2'/>Share
+                  </Button>
+                  
+                  {shareStatus === 'open' && (
+                    <div className="share-menu">
+                      <button onClick={() => {
+                        const url = `https://wa.me/?text=${encodeURIComponent('Check out my Roomeefy design: ' + window.location.href)}`;
+                        window.open(url, '_blank');
+                      }}>WhatsApp</button>
+                      <button onClick={() => {
+                        const url = `https://twitter.com/intent/tweet?url=${encodeURIComponent(window.location.href)}&text=${encodeURIComponent('My Roomeefy design')}`;
+                        window.open(url, '_blank');
+                      }}>Twitter</button>
+                      <button onClick={handleShare}>Copy Link</button>
+                    </div>
+                  )}
+                  {shareStatus === 'copied' && <div className="share-toast">Copied!</div>}
+                </div>
+
+                <Button 
+                    size='sm' 
+                    variant='outline' 
+                    onClick={toggleVisibility} 
+                    className={`visibility ${project?.isPublic ? 'is-public' : 'is-private'}`}
+                    disabled={isUpdatingVisibility}
+                >
+                    {project?.isPublic ? (
+                        <><Globe className='w-4 h-4 mr-2'/> Public Design</>
+                    ) : (
+                        <><Lock className='w-4 h-4 mr-2'/> Keep Private</>
+                    )}
                 </Button>
               </div>
             </div>
@@ -188,7 +268,7 @@ const VisualizerId = () => {
                     <ReactCompareSliderImage src={project?.sourceImage} alt='before' className='compare-img'/>
                   }   
                   itemTwo={
-                    <ReactCompareSliderImage src={currentImage || project?.renderedImage} alt='after' className='compare-img'/>
+                    <ReactCompareSliderImage src={currentImage || project?.renderedImage || ""} alt='after' className='compare-img'/>
                   } 
                 
                 />

@@ -1,4 +1,4 @@
-import { type ButtonHTMLAttributes } from "react";
+import { forwardRef, type ButtonHTMLAttributes } from "react";
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
     variant?: 'primary' | 'secondary' | 'ghost' | 'outline';
@@ -6,14 +6,14 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
     fullWidth?: boolean;
 }
 
-const Button = ({
+const Button = forwardRef<HTMLButtonElement, ButtonProps>(({
     variant = 'primary',
     size = 'md',
     fullWidth = false,
     className = '',
     children,
     ...props
-}: ButtonProps) => {
+}, ref) => {
     const baseClass = 'btn';
     const variantClass = `btn--${variant}`;
     const sizeClass = `btn--${size}`;
@@ -28,10 +28,12 @@ const Button = ({
     ].filter(Boolean).join(' ');
 
     return (
-        <button className={combinedClasses} {...props}>
+        <button ref={ref} className={combinedClasses} {...props}>
             {children}
         </button>
     );
-};
+});
+
+Button.displayName = 'Button';
 
 export default Button;
